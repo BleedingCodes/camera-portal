@@ -107,7 +107,7 @@ def main() -> None:
         return new_link
 
     try:
-        app = create_app(manager, renew_link)
+        app = create_app(manager, renew_link, lambda: current["link"].ip_address)
     except RuntimeError as exc:
         manager.shutdown()
         sys.exit(f"Setup error: {exc}")
