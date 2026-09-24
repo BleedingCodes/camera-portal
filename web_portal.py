@@ -19,7 +19,10 @@ short request, so any number of tiles works.
 
 JSON API used by app.js (key in the X-Portal-Key header, plus the session cookie):
   GET  /api/cameras                     status of every camera
-  POST /api/cameras                     add a camera  {ip_address, name, username, password}
+  GET  /api/discover                    find ONVIF cameras on the modem network (takes ~3 s)
+  POST /api/cameras                     add a camera  {ip_address, name, username, password,
+                                          and either detect: true (ask the camera via ONVIF)
+                                          or rtsp_path + rtsp_port}
   POST /api/cameras/<id>/record         {"on": true|false}
   POST /api/cameras/<id>/reconnect
   POST /api/cameras/<id>/remove         hide for this session (returns after restart, same as v3)
@@ -29,6 +32,7 @@ JSON API used by app.js (key in the X-Portal-Key header, plus the session cookie
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import logging
 import secrets
 import threading
@@ -41,7 +45,8 @@ from flask import (Flask, Response, abort, jsonify, redirect, render_template, r
                    send_from_directory, session, url_for)
 from werkzeug.security import check_password_hash
 
-from camera_core import CameraManager
+import onvif
+from camera_core import RTSP_PORT, CameraManager
 
 PROJECT_DIR = Path(__file__).resolve().parent
 STATIC_DIR = PROJECT_DIR / "static"
@@ -64,13 +69,14 @@ def fingerprint(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()[:16]
 
 
-def create_app(manager: CameraManager, renew_link) -> Flask:
+def create_app(manager: CameraManager, renew_link, local_ip) -> Flask:
     """Build the Flask app.
 
     Settings are read from manager.config["portal"] on every request, so a
     renewed key or changed password takes effect immediately.
     renew_link() is supplied by run_server.py. It creates the new link,
     schedules the move to the new port, and returns the new ModemLink.
+    local_ip() returns this computer's IP on the modem network (discovery is sent from it).
     """
     missing = [str(path.relative_to(PROJECT_DIR)) for path in REQUIRED_FILES if not path.exists()]
     if missing:  # Fail at startup with a clear message instead of a 500 error in the browser later.
@@ -90,6 +96,8 @@ def create_app(manager: CameraManager, renew_link) -> Flask:
 
     login_failures: dict[str, list[float]] = {}   # client IP -> times of recent wrong passwords
     failures_lock = threading.Lock()
+    discovered: dict[str, onvif.FoundCamera] = {} # camera IP -> last discovery result
+    discovery_lock = threading.Lock()             # One network scan at a time.
 
     # ── Checks ──
 
@@ -230,20 +238,59 @@ def create_app(manager: CameraManager, renew_link) -> Flask:
         require_api()
         return jsonify({"ok": True, "cameras": manager.status_list()})
 
+    @app.get("/api/discover")
+    def api_discover():
+        require_api()
+        with discovery_lock:
+            try:
+                found = onvif.discover(local_ip())
+            except OSError as exc:
+                return error(f"Could not search the network: {exc}", 500)
+            discovered.clear()
+            discovered.update({cam.ip_address: cam for cam in found})
+        added = manager.configured_ips()
+        return jsonify({"ok": True, "cameras": [
+            {"ip_address": cam.ip_address, "name": cam.name, "hardware": cam.hardware,
+             "added": cam.ip_address in added}
+            for cam in found
+        ]})
+
     @app.post("/api/cameras")
     def api_add():
         require_api()
         data = json_body()
+        ip_address = str(data.get("ip_address", "")).strip()
+        username = str(data.get("username", ""))
+        password = str(data.get("password", ""))
+        rtsp_port, rtsp_path = data.get("rtsp_port", RTSP_PORT), str(data.get("rtsp_path", ""))
+
+        if data.get("detect"):
+            try:
+                is_local = ipaddress.IPv4Address(ip_address).is_private
+            except ipaddress.AddressValueError:
+                return error(f"'{ip_address}' is not a valid IP address (example: 192.168.12.108).")
+            if not is_local:
+                return error("Automatic detection only works for cameras on the local network.")
+            if not username.strip():
+                return error("IP address, camera name, and username are required.")
+            found = discovered.get(ip_address)
+            device_url = found.device_url if found else f"http://{ip_address}{onvif.DEFAULT_DEVICE_PATH}"
+            try:
+                rtsp_port, rtsp_path = onvif.get_stream_location(ip_address, device_url, username.strip(), password)
+            except onvif.OnvifAuthError as exc:
+                return error(f"{exc} Check the username and password. Some brands (for example Hikvision) "
+                             "use a separate ONVIF user, set up in the camera's own settings. "
+                             "Or choose your camera brand under Stream path instead.")
+            except onvif.OnvifError as exc:
+                return error(f"Automatic detection failed: {exc} "
+                             "Choose your camera brand under Stream path, or pick Other and enter the path.")
+
         try:
-            camera_id = manager.add_camera(
-                str(data.get("ip_address", "")),
-                str(data.get("name", "")),
-                str(data.get("username", "")),
-                str(data.get("password", "")),
-            )
+            camera_id = manager.add_camera(ip_address, str(data.get("name", "")), username, password,
+                                           rtsp_port, rtsp_path)
         except ValueError as exc:
             return error(str(exc))
-        return jsonify({"ok": True, "id": camera_id})
+        return jsonify({"ok": True, "id": camera_id, "rtsp_port": int(rtsp_port), "rtsp_path": rtsp_path})
 
     @app.post("/api/cameras/<camera_id>/record")
     def api_record(camera_id: str):
