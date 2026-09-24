@@ -26,7 +26,12 @@ def ask_for_first_camera(manager: core.CameraManager) -> None:
     name = input("  Camera name: ")
     username = input("  Username: ")
     password = getpass.getpass("  Password (hidden): ")
-    manager.add_camera(ip_address, name, username, password)
+    rtsp_path = input(f"  Stream path [Enter = {core.RTSP_PATH}]: ").strip() or core.RTSP_PATH
+    rtsp_port = input(f"  RTSP port [Enter = {core.RTSP_PORT}]: ").strip() or core.RTSP_PORT
+    try:
+        manager.add_camera(ip_address, name, username, password, rtsp_port, rtsp_path)
+    except ValueError as exc:
+        sys.exit(f"Not added: {exc}")
 
 
 def main() -> None:
