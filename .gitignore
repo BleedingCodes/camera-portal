@@ -1,0 +1,15 @@
+# Secrets — never commit these
+secret.key
+camera_config.json
+camera_config.tmp
+portal_url.txt
+
+# Recordings and test output
+recordings/
+snapshot_*.jpg
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
