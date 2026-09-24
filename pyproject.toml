@@ -1,0 +1,19 @@
+# Project metadata only. camera-portal runs from the cloned folder
+# (python run_server.py). It is not built or installed with pip.
+[project]
+name = "camera-portal"
+version = "1.0.0"
+description = "Self-hosted multi-camera RTSP web portal: live view, recording, encrypted credentials, locked to the local modem network."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Michael Rivera", email = "mr.mainbytelabs@gmail.com" }]
+requires-python = ">=3.11"
+dependencies = [
+    "opencv-python-headless>=4.8",
+    "cryptography>=41",
+    "numpy>=1.24",
+    "flask>=3.0",
+]
+
+[project.urls]
+Repository = "https://github.com/BleedingCodes/camera-portal"

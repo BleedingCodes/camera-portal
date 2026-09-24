@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Camera Portal</title>
+  <link rel="stylesheet" href="{{ url_for('asset', name='style.css', key=key) }}">
+</head>
+<body>
+  <header>
+    <h1>Camera Portal</h1>
+    <span class="count" id="camera-count">{{ cameras|length }} camera{{ '' if cameras|length == 1 else 's' }}</span>
+    <div class="toolbar">
+      <button id="add-camera" title="Add camera">+ Add camera</button>
+      <button id="start-all">Start All</button>
+      <button id="stop-all">Stop All</button>
+      <button id="renew-link" title="Make a new link. The old one stops working.">Renew link</button>
+      <form method="post" action="{{ url_for('logout', key=key) }}" class="inline-form">
+        <button type="submit">Log out</button>
+      </form>
+    </div>
+  </header>
+
+  <p id="message" class="message" role="status" hidden></p>
+
+  <p class="empty" id="empty" {% if cameras %}hidden{% endif %}>No cameras yet. Click “+ Add camera”.</p>
+
+  <main class="grid" id="grid">
+    {% for cam in cameras %}
+    <section class="tile" data-id="{{ cam.id }}"
+             data-snapshot="{{ url_for('snapshot', camera_id=cam.id, key=key) }}"
+             data-stream="{{ url_for('stream', camera_id=cam.id, key=key) }}">
+      <h2>{{ cam.name }} <span class="rec-badge" {% if not cam.recording %}hidden{% endif %}>● REC</span></h2>
+      <button type="button" class="video" data-action="live" title="Open live video">
+        <img alt="{{ cam.name }} still image">
+        <span class="overlay" {% if cam.online %}hidden{% endif %}>{{ cam.status }}</span>
+        <span class="live-hint">Live view</span>
+      </button>
+      <p class="status {{ 'live' if cam.online else 'down' }}">{{ cam.status }}</p>
+      <div class="buttons">
+        <button data-action="record" {% if not cam.online %}disabled{% endif %}>
+          {{ 'Stop Recording' if cam.recording else 'Start Recording' }}
+        </button>
+        <button data-action="reconnect">Reconnect</button>
+        <button data-action="remove" class="danger">Remove</button>
+      </div>
+    </section>
+    {% endfor %}
+  </main>
+
+  <dialog id="add-dialog">
+    <form id="add-form" method="dialog">
+      <h2>Add camera</h2>
+      <label>Camera IP address <input name="ip_address" required placeholder="192.168.12.108" inputmode="decimal"></label>
+      <label>Camera name <input name="name" required maxlength="40" placeholder="Front door"></label>
+      <label>Username <input name="username" required autocomplete="off"></label>
+      <label>Password <input name="password" type="password" autocomplete="new-password"></label>
+      <p class="form-error" id="add-error" hidden></p>
+      <div class="dialog-buttons">
+        <button type="button" id="add-cancel">Cancel</button>
+        <button type="submit" class="primary" id="add-submit">Add</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="live-dialog" class="live-dialog">
+    <div class="live-header">
+      <h2 id="live-title">Live view</h2>
+      <button type="button" id="live-close">Close</button>
+    </div>
+    <img id="live-video" alt="Live video">
+    <p class="muted">Live video uses one connection. Only one camera plays live at a time.</p>
+  </dialog>
+
+  <dialog id="renew-dialog">
+    <h2>New portal link</h2>
+    <p>The old link has stopped working. Every other device needs this new link. Bookmark it now.</p>
+    <input id="new-link" readonly>
+    <p class="muted">Opening the new link in <span id="renew-countdown">5</span> s...</p>
+    <div class="dialog-buttons">
+      <button type="button" class="primary" id="open-new-link">Open now</button>
+    </div>
+  </dialog>
+
+  <script src="{{ url_for('asset', name='app.js', key=key) }}"></script>
+</body>
+</html>
