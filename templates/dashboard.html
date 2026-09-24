@@ -12,7 +12,8 @@
     <h1>Camera Portal</h1>
     <span class="count" id="camera-count">{{ cameras|length }} camera{{ '' if cameras|length == 1 else 's' }}</span>
     <div class="toolbar">
-      <button id="add-camera" title="Add camera">+ Add camera</button>
+      <button id="find-cameras" title="Search this network for ONVIF cameras">Find cameras</button>
+      <button id="add-camera" title="Add a camera by IP address">+ Add camera</button>
       <button id="start-all">Start All</button>
       <button id="stop-all">Stop All</button>
       <button id="renew-link" title="Make a new link. The old one stops working.">Renew link</button>
@@ -24,7 +25,7 @@
 
   <p id="message" class="message" role="status" hidden></p>
 
-  <p class="empty" id="empty" {% if cameras %}hidden{% endif %}>No cameras yet. Click “+ Add camera”.</p>
+  <p class="empty" id="empty" {% if cameras %}hidden{% endif %}>No cameras yet. Click “Find cameras”, or “+ Add camera” if you know the IP address.</p>
 
   <main class="grid" id="grid">
     {% for cam in cameras %}
@@ -56,12 +57,38 @@
       <label>Camera name <input name="name" required maxlength="40" placeholder="Front door"></label>
       <label>Username <input name="username" required autocomplete="off"></label>
       <label>Password <input name="password" type="password" autocomplete="new-password"></label>
+      <label>Stream path
+        <select name="stream" id="stream-select">
+          <option value="detect">Detect automatically (ONVIF)</option>
+          <option value="/cam/realmonitor?channel=1&amp;subtype=0">Dahua / Amcrest</option>
+          <option value="/Streaming/Channels/101">Hikvision</option>
+          <option value="/h264Preview_01_main">Reolink</option>
+          <option value="/axis-media/media.amp">Axis</option>
+          <option value="/stream1">TP-Link Tapo</option>
+          <option value="custom">Other (enter the path)</option>
+        </select>
+      </label>
+      <div id="custom-stream" hidden>
+        <label>RTSP path <input name="rtsp_path" placeholder="/stream1" autocomplete="off" spellcheck="false"></label>
+        <label>RTSP port <input name="rtsp_port" value="554" inputmode="numeric"></label>
+      </div>
+      <p class="muted hint" id="stream-hint">The portal asks the camera for its stream. Needs ONVIF turned on in the camera's settings.</p>
       <p class="form-error" id="add-error" hidden></p>
       <div class="dialog-buttons">
         <button type="button" id="add-cancel">Cancel</button>
         <button type="submit" class="primary" id="add-submit">Add</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="find-dialog">
+    <h2>Cameras on this network</h2>
+    <p class="muted" id="find-status" role="status"></p>
+    <ul class="find-list" id="find-list"></ul>
+    <div class="dialog-buttons">
+      <button type="button" id="find-again">Search again</button>
+      <button type="button" id="find-close">Close</button>
+    </div>
   </dialog>
 
   <dialog id="live-dialog" class="live-dialog">
