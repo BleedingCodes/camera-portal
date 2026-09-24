@@ -29,7 +29,7 @@ os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|stimeout;50000
 import cv2  # noqa: E402  (import must come after the env var above)
 from cryptography.fernet import Fernet, InvalidToken  # noqa: E402
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
@@ -43,7 +43,9 @@ RECONNECT_DELAY_SECONDS = 3         # Wait between reconnect attempts.
 MAX_CONNECT_FAILURES = 3            # After this many failures the camera goes Offline.
 MAX_DISK_USAGE = 75                 # Delete oldest recordings above this disk-usage %.
 CLEANUP_INTERVAL_SECONDS = 60 * 60  # Run disk cleanup every hour.
-RTSP_PATH = "/cam/realmonitor?channel=1&subtype=0"  # Dahua/Amcrest-style path, same as v3.
+RTSP_PATH = "/cam/realmonitor?channel=1&subtype=0"  # Default path (Dahua/Amcrest), used when a camera has none saved.
+RTSP_PORT = 554                                     # Default RTSP port, used when a camera has none saved.
+MAX_RTSP_PATH_LENGTH = 200
 
 
 class ConfigError(Exception):
@@ -112,10 +114,33 @@ def unique_file_prefix(name: str, existing_prefixes: list[str]) -> str:
     return prefix
 
 
-def build_rtsp_url(ip_address: str, username: str, password: str) -> str:
+def validate_rtsp_path(path: str) -> str:
+    """Return the cleaned path, or raise ValueError with a message the portal can show."""
+    path = path.strip()
+    if not path.startswith("/"):
+        raise ValueError("The stream path must start with / (example: /stream1).")
+    if len(path) > MAX_RTSP_PATH_LENGTH:
+        raise ValueError(f"The stream path must be {MAX_RTSP_PATH_LENGTH} characters or fewer.")
+    if any(ch.isspace() or not ch.isprintable() for ch in path) or "#" in path:
+        raise ValueError("The stream path can't contain spaces, # or control characters.")
+    return path
+
+
+def validate_rtsp_port(port) -> int:
+    try:
+        number = int(str(port).strip())
+    except ValueError:
+        raise ValueError("The RTSP port must be a number (usually 554).") from None
+    if not 1 <= number <= 65535:
+        raise ValueError("The RTSP port must be between 1 and 65535.")
+    return number
+
+
+def build_rtsp_url(ip_address: str, username: str, password: str,
+                   port: int = RTSP_PORT, path: str = RTSP_PATH) -> str:
     safe_username = quote(username, safe="")
     safe_password = quote(password, safe="")
-    return f"rtsp://{safe_username}:{safe_password}@{ip_address}:554{RTSP_PATH}"
+    return f"rtsp://{safe_username}:{safe_password}@{ip_address}:{port}{path}"
 
 
 def camera_details_to_config(details: dict) -> CameraConfig:
@@ -124,6 +149,8 @@ def camera_details_to_config(details: dict) -> CameraConfig:
         str(details.get("ip_address", "")).strip(),
         str(details.get("username", "")).strip(),
         str(details.get("password", "")),
+        int(details.get("rtsp_port", RTSP_PORT)),      # Configs from v1.0.0 / pyqt v3 have no port or path:
+        str(details.get("rtsp_path", RTSP_PATH)),      # they keep the Dahua/Amcrest defaults.
     )
     file_prefix = str(details.get("file_prefix", "")).strip() or make_file_prefix(name)
     return CameraConfig(name=name, url=url, file_prefix=file_prefix)
@@ -367,8 +394,14 @@ class CameraManager:
 
     # ── Camera management ──
 
-    def add_camera(self, ip_address: str, name: str, username: str, password: str) -> str:
-        """Validate, save to the encrypted config, start streaming. Returns the new camera_id."""
+    def add_camera(self, ip_address: str, name: str, username: str, password: str,
+                   rtsp_port: int | str = RTSP_PORT, rtsp_path: str = RTSP_PATH) -> str:
+        """Validate, save to the encrypted config, start streaming. Returns the camera_id.
+
+        Adding a camera that's already in the config (same IP, port and path):
+          * still showing in the portal -> ValueError
+          * removed this session        -> it's restarted and shown again (not saved twice)
+        """
         ip_address, name, username = ip_address.strip(), name.strip(), username.strip()
         if not ip_address or not name or not username:
             raise ValueError("IP address, camera name, and username are required.")
@@ -378,20 +411,42 @@ class CameraManager:
             raise ValueError(f"'{ip_address}' is not a valid IP address (example: 192.168.12.108).") from None
         if len(name) > 40:
             raise ValueError("Camera name must be 40 characters or fewer.")
+        rtsp_port = validate_rtsp_port(rtsp_port)
+        rtsp_path = validate_rtsp_path(rtsp_path)
 
         with self.config_lock:  # Two browsers adding at once can't corrupt the list or the file.
-            existing = [str(d.get("file_prefix", "")) for d in self.config["cameras"]]
+            for existing in self.config["cameras"]:
+                same_stream = (str(existing.get("ip_address", "")).strip() == ip_address
+                               and int(existing.get("rtsp_port", RTSP_PORT)) == rtsp_port
+                               and str(existing.get("rtsp_path", RTSP_PATH)) == rtsp_path)
+                if not same_stream:
+                    continue
+                camera_id = camera_details_to_config(existing).file_prefix
+                worker = self.get_worker(camera_id)
+                if worker is not None and worker.is_alive():
+                    raise ValueError(f"This camera is already added as '{existing.get('name', camera_id)}'.")
+                self._start_worker(existing)        # Removed earlier this session: bring it back.
+                return camera_id
+
+            existing_prefixes = [str(d.get("file_prefix", "")) for d in self.config["cameras"]]
             details = {
                 "ip_address": ip_address,
                 "name": name,
                 "username": username,
                 "password": password,
-                "file_prefix": unique_file_prefix(name, existing),
+                "rtsp_port": rtsp_port,
+                "rtsp_path": rtsp_path,
+                "file_prefix": unique_file_prefix(name, existing_prefixes),
             }
             self.config["cameras"].append(details)
             save_config(self.config, self.key)
         self._start_worker(details)
         return details["file_prefix"]
+
+    def configured_ips(self) -> set[str]:
+        """IP addresses of every camera in the config (including ones removed this session)."""
+        with self.config_lock:
+            return {str(d.get("ip_address", "")).strip() for d in self.config["cameras"]}
 
     def remove_camera(self, camera_id: str) -> bool:
         """Stop and hide a camera for this session only. It stays in the config (same as v3)."""
