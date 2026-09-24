@@ -2,7 +2,7 @@
 # (python run_server.py). It is not built or installed with pip.
 [project]
 name = "camera-portal"
-version = "1.0.0"
+version = "1.1.0"
 description = "Self-hosted multi-camera RTSP web portal: live view, recording, encrypted credentials, locked to the local modem network."
 readme = "README.md"
 license = { text = "MIT" }
