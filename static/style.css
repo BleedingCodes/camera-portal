@@ -154,7 +154,7 @@ dialog h2 { margin: 0 0 12px; font-size: 1.1rem; }
 
 label { display: block; margin-bottom: 10px; font-size: 0.9rem; color: var(--muted); }
 
-input {
+input, select {
   display: block;
   width: 100%;
   margin-top: 4px;
@@ -208,3 +208,23 @@ input {
   border-radius: 4px;
 }
 .live-dialog .muted { margin: 8px 0 0; }
+
+/* ── Add camera: stream path ── */
+
+.hint { margin: -4px 0 12px; font-size: 0.85rem; }
+
+/* ── Find cameras ── */
+
+#find-dialog { width: min(520px, calc(100vw - 32px)); }
+.find-list { list-style: none; margin: 0 0 12px; padding: 0; max-height: 50vh; overflow-y: auto; }
+.find-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #333;
+}
+.find-list li:last-child { border-bottom: 0; }
+.find-list strong { display: block; overflow-wrap: anywhere; }
+.find-list .muted { font-size: 0.85rem; overflow-wrap: anywhere; }
