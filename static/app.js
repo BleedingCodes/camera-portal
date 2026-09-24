@@ -190,32 +190,136 @@ document.getElementById("stop-all").addEventListener("click", async () => {
 const dialog = document.getElementById("add-dialog");
 const form = document.getElementById("add-form");
 const formError = document.getElementById("add-error");
+const streamSelect = document.getElementById("stream-select");
+const customStream = document.getElementById("custom-stream");
+const streamHint = document.getElementById("stream-hint");
+const submitButton = document.getElementById("add-submit");
 
-document.getElementById("add-camera").addEventListener("click", () => {
+const STREAM_HINTS = {
+  detect: "The portal asks the camera for its stream. Needs ONVIF turned on in the camera's settings.",
+  custom: "Find the RTSP path in the camera's manual or web settings. The port is usually 554.",
+  preset: "Uses this brand's usual main-stream path on port 554.",
+};
+
+function updateStreamFields() {
+  const mode = streamSelect.value;
+  customStream.hidden = mode !== "custom";
+  form.elements.rtsp_path.required = mode === "custom";
+  streamHint.textContent = STREAM_HINTS[mode] || STREAM_HINTS.preset;
+  submitButton.textContent = "Add";
+}
+streamSelect.addEventListener("change", updateStreamFields);
+
+function openAddDialog(prefill = {}) {
   form.reset();
   formError.hidden = true;
+  form.elements.ip_address.value = prefill.ip_address || "";
+  form.elements.name.value = prefill.name || "";
+  updateStreamFields();
   dialog.showModal();
-});
+  (prefill.ip_address ? form.elements.username : form.elements.ip_address).focus();
+}
 
+document.getElementById("add-camera").addEventListener("click", () => openAddDialog());
 document.getElementById("add-cancel").addEventListener("click", () => dialog.close());
 
 form.addEventListener("submit", async event => {
   event.preventDefault();
-  const submit = document.getElementById("add-submit");
-  submit.disabled = true;
+  const fields = Object.fromEntries(new FormData(form));
+  const body = {
+    ip_address: fields.ip_address,
+    name: fields.name,
+    username: fields.username,
+    password: fields.password,
+  };
+  if (fields.stream === "detect") {
+    body.detect = true;
+  } else if (fields.stream === "custom") {
+    body.rtsp_path = fields.rtsp_path;
+    body.rtsp_port = fields.rtsp_port;
+  } else {
+    body.rtsp_path = fields.stream;           // A brand preset. Its value is the path.
+    body.rtsp_port = 554;
+  }
+
+  submitButton.disabled = true;
+  submitButton.textContent = body.detect ? "Detecting..." : "Adding...";
   formError.hidden = true;
   try {
-    const fields = Object.fromEntries(new FormData(form));
-    await api("/api/cameras", "POST", fields);
+    await api("/api/cameras", "POST", body);
     dialog.close();
-    window.location.reload();                    // Show the new tile with its live stream.
+    window.location.reload();                    // Show the new tile.
   } catch (err) {
     formError.textContent = err.message;
     formError.hidden = false;
   } finally {
-    submit.disabled = false;
+    submitButton.disabled = false;
+    submitButton.textContent = "Add";
   }
 });
+
+// ── Find cameras (ONVIF discovery) ───────────────────────────────────────────
+
+const findDialog = document.getElementById("find-dialog");
+const findList = document.getElementById("find-list");
+const findStatus = document.getElementById("find-status");
+const findAgain = document.getElementById("find-again");
+
+function renderFound(cameras) {
+  findList.replaceChildren();
+  for (const cam of cameras) {
+    // Names come from devices on the network, so they're set with textContent, never as HTML.
+    const item = document.createElement("li");
+    const info = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = cam.name;
+    const detail = document.createElement("span");
+    detail.className = "muted";
+    detail.textContent = cam.hardware ? `${cam.ip_address}, model ${cam.hardware}` : cam.ip_address;
+    info.append(title, detail);
+
+    const button = document.createElement("button");
+    button.type = "button";
+    if (cam.added) {
+      button.textContent = "Added";
+      button.disabled = true;
+    } else {
+      button.textContent = "Add";
+      button.className = "primary";
+      button.addEventListener("click", () => {
+        findDialog.close();
+        openAddDialog({ ip_address: cam.ip_address, name: cam.name === cam.ip_address ? "" : cam.name });
+      });
+    }
+    item.append(info, button);
+    findList.append(item);
+  }
+}
+
+async function searchNetwork() {
+  findAgain.disabled = true;
+  findList.replaceChildren();
+  findStatus.textContent = "Searching this network (about 3 seconds)...";
+  try {
+    const { cameras } = await api("/api/discover");
+    renderFound(cameras);
+    findStatus.textContent = cameras.length
+      ? `Found ${cameras.length} camera${cameras.length === 1 ? "" : "s"}.`
+      : "No ONVIF cameras answered. Check that ONVIF is turned on in each camera, " +
+        "or add the camera with “+ Add camera” and its IP address.";
+  } catch (err) {
+    findStatus.textContent = `Search failed: ${err.message}`;
+  } finally {
+    findAgain.disabled = false;
+  }
+}
+
+document.getElementById("find-cameras").addEventListener("click", () => {
+  findDialog.showModal();
+  searchNetwork();
+});
+findAgain.addEventListener("click", searchNetwork);
+document.getElementById("find-close").addEventListener("click", () => findDialog.close());
 
 // ── Renew link ───────────────────────────────────────────────────────────────
 
