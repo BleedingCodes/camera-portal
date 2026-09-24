@@ -4,6 +4,29 @@ All notable changes to camera-portal are documented here.
 
 ---
 
+## [1.1.0] — 2026-09-23
+
+### Added
+- **Find cameras** (`onvif.py`, standard library only): searches the modem network with ONVIF WS-Discovery and lists each camera's IP, name, and model. Cameras already in the config show as Added.
+- **Automatic stream detection**: when adding a camera, the portal logs in over ONVIF and asks the camera for its highest-resolution RTSP stream. Supports WS-Security password digest and HTTP Digest, and corrects for camera clocks that are set wrong.
+- **Per-camera RTSP port and path**, stored in the config as `rtsp_port` and `rtsp_path`
+- Stream path presets in the add dialog: Dahua / Amcrest, Hikvision, Reolink, Axis, TP-Link Tapo, or Other (enter the path and port)
+- `edit_cameras.py set-path <id> <path> [--port N]`
+- `edit_cameras.py list` shows each camera's port and path; `check` tests each camera's own port
+- `test_core.py` asks for the stream path and port when adding the first camera
+
+### Changed
+- Adding a camera that is already in the config (same IP, port, and path) is refused if it is showing, and brought back if it was removed this session. It is never saved twice.
+- Configs from v1.0.0 and pyqt-camera-dashboard v3 need no changes. Cameras without a saved port and path keep the Dahua/Amcrest default.
+
+### Security
+- Addresses reported by a camera are always rebuilt with the camera's own IP, so a device on the network can't redirect the portal (or a camera password) to another host.
+- The camera password is never sent in plain text during detection (password digest only).
+- Detection works only for private (local network) IP addresses. Camera replies over 1 MB, or containing an XML DOCTYPE, are refused.
+- Names and models from the network are shown as plain text in the portal, never as HTML.
+
+---
+
 ## [1.0.0] — 2026-09-23
 
 First release. Ported from [pyqt-camera-dashboard](https://github.com/BleedingCodes/pyqt-camera-dashboard) v3.0.1. The PyQt5 desktop window is replaced by a web portal served on the local modem network.
