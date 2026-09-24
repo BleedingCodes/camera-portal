@@ -16,6 +16,8 @@ camera-portal is the successor to [pyqt-camera-dashboard](https://github.com/Ble
 
 ## What It Does
 
+- Finds ONVIF cameras on the network and asks each one for its own stream address, so you don't need to know IPs or RTSP paths
+- Works with any RTSP camera. Built-in path presets cover Dahua/Amcrest, Hikvision, Reolink, Axis, and TP-Link Tapo; any other path can be entered by hand.
 - Shows every camera in a grid of still images that refresh about once a second. Click a camera for live video.
 - Records each camera to MP4 in 15-minute files, sorted by date and hour
 - Reconnects dropped cameras automatically. After 3 failed attempts a camera shows **Offline** until you press Reconnect.
@@ -25,7 +27,7 @@ camera-portal is the successor to [pyqt-camera-dashboard](https://github.com/Ble
 
 ## Who It's For
 
-Home and small-site users running Dahua/Amcrest-style RTSP cameras on a local network, who want to watch and record from any device on that network without a vendor app or cloud service. It is also built for labs and workshops that already run a Linux box on the bench network.
+Home and small-site users running RTSP IP cameras on a local network, who want to watch and record from any device on that network without a vendor app or cloud service. It also suits temporary and portable setups (job sites, events, labs, integrators commissioning cameras): plug a Linux machine into the site's router, click Find cameras, and share the link.
 
 ---
 
@@ -35,7 +37,7 @@ Home and small-site users running Dahua/Amcrest-style RTSP cameras on a local ne
 |---|---|
 | OS | Linux (Ubuntu/Debian tested). **Windows and macOS are not supported.** The network detection reads `/proc/net/route`. |
 | Python | 3.11 or higher |
-| Cameras | RTSP on port 554, path `/cam/realmonitor?channel=1&subtype=0` (Dahua, Amcrest, and many rebrands). Other brands: see [Hardcoded values](#hardcoded-values). |
+| Cameras | Any camera with an RTSP stream. ONVIF support (Profile S) is needed only for Find cameras and automatic stream detection. |
 | Network | The Linux computer and the viewing devices on the same modem/router network. The computer must get a **private** IP address (for example `192.168.x.x`, `10.x.x.x`). |
 | Browser | Any current Chrome, Edge, Firefox, or Safari (desktop or phone) |
 
@@ -106,11 +108,53 @@ Your cameras, names, and recording filename prefixes carry over unchanged.
    The same link is saved in `portal_url.txt` (readable only by your user account).
 5. Open that link on a phone or laptop connected to the modem's Wi-Fi.
 6. Sign in with the portal password.
-7. New users: click **+ Add camera** and enter the camera's IP address, a name, the username, and the password.
+7. New users: add your cameras (see [Adding Cameras](#adding-cameras)).
 
 The first run must happen in a terminal, because the password prompt needs one. After that, the port and key stay the same across restarts until you press **Renew link**.
 
 **Bookmark the full link, including `?key=...`.** Without the key, the server answers every request with "not found".
+
+---
+
+## Adding Cameras
+
+### Find cameras (ONVIF)
+
+1. Click **Find cameras**. The portal searches the modem network for about 3 seconds and lists every ONVIF camera that answers, with its IP, name, and model.
+2. Click **Add** next to a camera. The add dialog opens with the IP and name filled in.
+3. Enter the camera's username and password.
+4. Leave **Stream path** on **Detect automatically (ONVIF)**.
+5. Click **Add**. The portal logs in to the camera, asks for its highest-resolution stream, saves it, and starts the camera.
+
+### Add a camera by IP address
+
+Use this when Find cameras doesn't list the camera (ONVIF turned off, or the camera is on a different network segment).
+
+1. Click **+ Add camera**.
+2. Enter the IP address, a name, the username, and the password.
+3. Choose **Stream path**:
+
+| Choice | Path used (port 554) |
+|---|---|
+| Detect automatically (ONVIF) | Whatever the camera reports |
+| Dahua / Amcrest | `/cam/realmonitor?channel=1&subtype=0` |
+| Hikvision | `/Streaming/Channels/101` |
+| Reolink | `/h264Preview_01_main` |
+| Axis | `/axis-media/media.amp` |
+| TP-Link Tapo | `/stream1` |
+| Other (enter the path) | The path and port you type |
+
+The presets are each brand's usual main-stream path. Firmware varies, so if a preset camera stays Offline, check the RTSP path in its manual or web settings and use **Other**. For example, some newer Reolink H.265 models use `/Preview_01_main` instead.
+
+4. Click **Add**.
+
+### ONVIF notes
+
+- **ONVIF may be off by default.** Turn it on in the camera's own web settings. Reolink, for example, has it under network/advanced server settings.
+- **Some brands use a separate ONVIF account.** Hikvision requires an ONVIF user created in the camera's settings. Enter that user in the add dialog.
+- **Find cameras only reaches the local network segment.** Routers do not pass the search message between subnets. Cameras on another subnet can still be added by IP with a preset or Other.
+- **Detection picks the highest-resolution stream.** On a busy Wi-Fi network, or with many cameras, a camera's lower-resolution sub-stream may run better. Enter it with **Other** (for example Hikvision `/Streaming/Channels/102`).
+- A camera already in the config shows as **Added** in the search results. Adding the same camera again is refused while it's showing. If you removed it this session, adding it again brings it back using its saved login.
 
 ---
 
@@ -129,7 +173,8 @@ The first run must happen in a terminal, because the password prompt needs one. 
 
 | Button | What it does |
 |---|---|
-| + Add camera | Adds a camera, saves it to the encrypted config, and starts it |
+| Find cameras | Searches the modem network for ONVIF cameras |
+| + Add camera | Adds a camera by IP address, saves it to the encrypted config, and starts it |
 | Start All | Starts recording on every camera that is live |
 | Stop All | Stops recording on every camera |
 | Renew link | Makes a new port and key. The old link stops working, every other device is signed out, and this browser moves to the new link. |
@@ -156,15 +201,19 @@ Stop the server with **Ctrl+C**.
 
 ### edit_cameras.py
 
-Stop `run_server.py` before running `set-ip`. The running server keeps its own copy of the config and would overwrite your change on its next save.
+Stop `run_server.py` before running `set-ip` or `set-path`. The running server keeps its own copy of the config and would overwrite your change on its next save.
 
 ```bash
-python edit_cameras.py list                         # camera IDs, names, IPs (no passwords)
+python edit_cameras.py list                                     # IDs, names, IPs, ports, paths (no passwords)
 python edit_cameras.py set-ip front_door 192.168.12.201
-python edit_cameras.py check                        # can this computer reach each camera on port 554?
+python edit_cameras.py set-path front_door '/Streaming/Channels/102'
+python edit_cameras.py set-path front_door '/stream1' --port 8554
+python edit_cameras.py check                                    # can this computer reach each camera's RTSP port?
 ```
 
-The camera ID is the first column of `list`. `check` tests the network path only. It does not test the camera password.
+- The camera ID is the first column of `list`.
+- Put the path in single quotes. Paths containing `&` or `?` otherwise break in the shell.
+- `check` tests the network path only. It does not test the camera password or the stream path.
 
 ### modem_link.py
 
@@ -228,8 +277,8 @@ All of these are listed in `.gitignore`. Do not remove them from it.
 
 - **Plain HTTP, no TLS.** The link key and the password cross the Wi-Fi unencrypted at the HTTP level. The Wi-Fi's own WPA2/WPA3 encryption protects them from outsiders, but another device on the same network that captures traffic could read them. Use this only on a network where you trust every connected device. Never forward the portal's port on the modem.
 - **Linux only.**
-- **Remove is session-only.** There is no permanent delete. A removed camera comes back when the server restarts.
-- **Do not add the same camera twice.** Adding the same camera again creates a second entry, which opens the camera twice.
+- **Remove is session-only.** There is no permanent delete. A removed camera comes back when the server restarts, or sooner if you add it again.
+- **Find cameras needs ONVIF and the same network segment.** Everything else works with plain RTSP.
 - **No autostart.** The server runs while the terminal session runs. Setting it up as a system service is not covered here.
 - **Hard stop can cut the last file.** If the process is killed (not stopped with Ctrl+C), the MP4 being written may not play.
 
@@ -241,9 +290,12 @@ Change these in the source if your setup differs.
 
 | Value | File | Constant | Default |
 |---|---|---|---|
-| RTSP path | `camera_core.py` | `RTSP_PATH` | `/cam/realmonitor?channel=1&subtype=0` |
-| RTSP port (URL) | `camera_core.py` | in `build_rtsp_url()` | `554` |
-| RTSP port (`check`) | `edit_cameras.py` | `RTSP_PORT` | `554` |
+| Default RTSP path (cameras with none saved) | `camera_core.py` | `RTSP_PATH` | `/cam/realmonitor?channel=1&subtype=0` |
+| Default RTSP port (cameras with none saved) | `camera_core.py` | `RTSP_PORT` | `554` |
+| Brand path presets | `templates/dashboard.html` | `<select id="stream-select">` | See [Adding Cameras](#adding-cameras) |
+| Find cameras listen time | `onvif.py` | `DISCOVERY_SECONDS` | `3.0` s |
+| ONVIF request timeout | `onvif.py` | `SOAP_TIMEOUT_SECONDS` | `5` s |
+| ONVIF service path (when not discovered) | `onvif.py` | `DEFAULT_DEVICE_PATH` | `/onvif/device_service` |
 | Recording file length | `camera_core.py` | `RECORD_DURATION_SECONDS` | `900` (15 min) |
 | Disk cleanup threshold | `camera_core.py` | `MAX_DISK_USAGE` | `75` (%) |
 | Failures before Offline | `camera_core.py` | `MAX_CONNECT_FAILURES` | `3` |
@@ -264,6 +316,11 @@ Change these in the source if your setup differs.
 | `Port NNNNN is in use` | The portal is already running, or another program took the port | Stop the other copy. If none is running: `python modem_link.py --renew` |
 | `Config error: Could not decrypt camera_config.json` | `secret.key` does not match the config | Copy the `secret.key` that was used with this config into the folder |
 | `No portal password set. Run 'python run_server.py' once in a terminal` | First run was started without a terminal (for example from a script) | Run it once from a terminal |
+| Other devices can't open the link at all (times out) | A firewall on the Linux machine blocks the portal port | Check with `sudo ufw status`. If active, allow the port from the banner: `sudo ufw allow <port>/tcp`. Repeat after every Renew link (it changes the port). |
+| Find cameras finds nothing | ONVIF is off, the cameras are on another subnet, or a firewall drops the replies | Turn ONVIF on in each camera. If `sudo ufw status` shows active, allow UDP from the local network, for example `sudo ufw allow proto udp from 192.168.12.0/24` (use your network). Or add cameras by IP. |
+| "The camera rejected the username or password for ONVIF" | Wrong login, or the brand needs a separate ONVIF user | Re-check the login. For Hikvision, create an ONVIF user in the camera's settings. Or choose the brand preset instead. |
+| "Automatic detection failed: No ONVIF service answered" | ONVIF is off, or the camera uses a non-standard ONVIF port | Turn ONVIF on, use **Find cameras** first (it learns the right port), or choose a brand preset / Other |
+| Camera added with a preset stays **Offline** | The preset path doesn't match this model's firmware | Look up the RTSP path in the camera's manual, then `python edit_cameras.py set-path <id> '<path>'` with the server stopped |
 | Browser shows "Not Found" | The link is missing the key, or the link was renewed | Use the newest link from the banner or `portal_url.txt` |
 | Tile shows **Offline** | Camera unreachable or wrong credentials | Run `python edit_cameras.py check`. If reachable, re-check the username and password. |
 | `ImportError` for `cv2` | Both `opencv-python` and `opencv-python-headless` are installed | `pip uninstall -y opencv-python opencv-python-headless`, then `pip install -r requirements.txt` |
