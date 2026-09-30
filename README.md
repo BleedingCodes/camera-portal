@@ -8,7 +8,7 @@ A self-hosted web portal for RTSP IP cameras: live view, recording, and encrypte
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 ![Platform](https://img.shields.io/badge/Platform-Linux-lightgrey)
 
-One Linux computer connects to your cameras and records them. Any phone or laptop on the same modem Wi-Fi opens the portal in a browser. No app to install, no cloud account, no port forwarding.
+Stream and record multiple IP cameras on a browser. The server is created/hosted and recordings are stored on a single Linux computer, that's connected to a networks wifi router/modem. Any phone or laptop on the same modem Wi-Fi, can open the portal in a browser. No app to install, no cloud account, no port forwarding. 
 
 camera-portal is the successor to [pyqt-camera-dashboard](https://github.com/BleedingCodes/pyqt-camera-dashboard). It uses the same camera engine and the same encrypted config file. The PyQt5 desktop window is replaced by a browser portal.
 
@@ -347,7 +347,7 @@ Change these in the source if your setup differs.
 | `Port NNNNN is in use` | The portal is already running, or another program took the port | Stop the other copy. If none is running: `python modem_link.py --renew` |
 | `Config error: Could not decrypt camera_config.json` | `secret.key` does not match the config | Copy the `secret.key` that was used with this config into the folder |
 | `No portal password set. Run 'python run_server.py' once in a terminal` | First run was started without a terminal (for example from a script) | Run it once from a terminal |
-| Other devices can't open the link at all (times out) | A firewall on the Linux machine blocks the portal port | Check with `sudo ufw status`. If active, allow the port from the banner: `sudo ufw allow <port>/tcp`. Repeat after every Renew link (it changes the port). |
+| Other devices can't open the link at all (times out) | A firewall on the Linux machine blocks the portal port | Check with sudo ufw status. If active, allow your local subnet to the port from the banner. See [Firewall](#firewall). Repeat after every Renew link |
 | Find cameras finds nothing | ONVIF is off, the cameras are on another subnet, or a firewall drops the replies | Turn ONVIF on in each camera. If `sudo ufw status` shows active, allow UDP from the local network, for example `sudo ufw allow proto udp from 192.168.12.0/24` (use your network). Or add cameras by IP. |
 | "The camera rejected the username or password for ONVIF" | Wrong login, or the brand needs a separate ONVIF user | Re-check the login. For Hikvision, create an ONVIF user in the camera's settings. Or choose the brand preset instead. |
 | "Automatic detection failed: No ONVIF service answered" | ONVIF is off, or the camera uses a non-standard ONVIF port | Turn ONVIF on, use **Find cameras** first (it learns the right port), or choose a brand preset / Other |
