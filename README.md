@@ -258,6 +258,37 @@ recordings/
 2. **Portal password.** Unlocks a signed session cookie for 30 days per device. 5 wrong passwords from one IP address within 60 seconds blocks that address for up to 60 seconds.
 3. **Network binding.** The server listens only on this computer's private IP on the modem network. It refuses to start on a public IP.
 
+### Firewall
+
+The portal listens on one TCP port on this computer's private IP. That port is random (20000-60999) and is shown in the banner and in `portal_url.txt`. If the Linux firewall blocks inbound connections, other devices time out when they open the link.
+
+1. Check whether the firewall is active:
+
+```bash
+   sudo ufw status
+```
+
+2. If it is active, allow your local network to reach the portal port. Replace `192.168.12.0/24` with your network and `41873` with the port from your link:
+
+```bash
+   sudo ufw allow from 192.168.12.0/24 to any port 41873 proto tcp
+```
+
+   Find your network with `ip -br addr` (the address and prefix next to your interface, for example `192.168.12.23/24` means `192.168.12.0/24`).
+
+3. After every **Renew link**, the port changes. Remove the old rule and add one for the new port:
+
+```bash
+   sudo ufw status numbered
+   sudo ufw delete <rule number>
+```
+
+- Allow the **local subnet**, not the modem's gateway IP. Phones and laptops connect from their own addresses.
+- Do not use a bare `sudo ufw allow <port>/tcp`. It opens the port to every source.
+- Never forward this port on the modem.
+- **Find cameras** also needs inbound UDP replies from the cameras. See [Troubleshooting](#troubleshooting).
+- Other firewalls (firewalld, nftables, Windows-style tools on a router) need the same rule: allow TCP from your local subnet to the portal port.
+
 Renewing the link or changing the password signs out every other device.
 
 ### Files that must never be shared or committed
