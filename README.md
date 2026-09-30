@@ -286,8 +286,9 @@ The portal listens on one TCP port on this computer's private IP. That port is r
 - Allow the **local subnet**, not the modem's gateway IP. Phones and laptops connect from their own addresses.
 - Do not use a bare `sudo ufw allow <port>/tcp`. It opens the port to every source.
 - Never forward this port on the modem.
-- **Find cameras** also needs inbound UDP replies from the cameras. See [Troubleshooting](#troubleshooting).
-- Other firewalls (firewalld, nftables, Windows-style tools on a router) need the same rule: allow TCP from your local subnet to the portal port.
+- - Other firewalls (firewalld, nftables) need the same rules: allow TCP from your local subnet to the portal port, and allow UDP from your local subnet for Find cameras.
+- **Camera video** is pulled over RTSP on TCP only (no UDP), as an outbound connection from this computer to each camera's RTSP port (554 by default, or the port you set). A default `ufw` setup allows outbound traffic, so this normally needs no rule. It only matters if you block outbound traffic or use a strict firewall on the camera network.
+- **Find cameras** sends a multicast probe (UDP 239.255.255.250, port 3702) and the cameras answer with UDP to a random local port. A firewall that blocks inbound UDP drops those answers and the search finds nothing. Allow UDP from your local subnet, for example `sudo ufw allow from 192.168.12.0/24 proto udp` (use your network). Adding a camera by IP does not need this rule.
 
 Renewing the link or changing the password signs out every other device.
 
