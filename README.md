@@ -364,6 +364,5 @@ Change these in the source if your setup differs.
 MIT License — see [LICENSE](LICENSE).
 
 ## Built by MainbyteLabs
-
-Technical documentation and Python tooling for electronics labs and hardware teams.
+Technical documentation and Python tooling for electronics labs and hardware teams — developed with AI, directed and tested by a working electronics technician.
 https://github.com/MR-MainbyteLabs
