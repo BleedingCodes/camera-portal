@@ -69,7 +69,7 @@ def fingerprint(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()[:16]
 
 
-def create_app(manager: CameraManager, renew_link, local_ip) -> Flask:
+def create_app(manager: CameraManager, renew_link, local_ip, *, secure_cookies: bool = False) -> Flask:
     """Build the Flask app.
 
     Settings are read from manager.config["portal"] on every request, so a
@@ -90,6 +90,7 @@ def create_app(manager: CameraManager, renew_link, local_ip) -> Flask:
         SESSION_COOKIE_NAME="cam_portal_session",
         SESSION_COOKIE_HTTPONLY=True,          # JavaScript can't read the cookie.
         SESSION_COOKIE_SAMESITE="Strict",      # Other websites can't send it.
+        SESSION_COOKIE_SECURE=secure_cookies,  # Only send the cookie over HTTPS when TLS is enabled.
         PERMANENT_SESSION_LIFETIME=timedelta(days=SESSION_DAYS),
     )
     logging.getLogger("werkzeug").setLevel(logging.WARNING)  # Request logs would print the secret key.
