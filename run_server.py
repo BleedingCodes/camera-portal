@@ -72,7 +72,12 @@ def main() -> None:
     parser.add_argument("--interface", help="pin the modem's network interface, e.g. wlan0")
     parser.add_argument("--auto", action="store_true", help="forget a pinned interface")
     parser.add_argument("--reset-password", action="store_true", help="choose a new portal password")
+    parser.add_argument("--tls-cert", help="TLS certificate file (must be supplied with --tls-key)")
+    parser.add_argument("--tls-key", help="TLS private key file (must be supplied with --tls-cert)")
     args = parser.parse_args()
+    if bool(args.tls_cert) != bool(args.tls_key):
+        parser.error("--tls-cert and --tls-key must be supplied together")
+    ssl_context = (args.tls_cert, args.tls_key) if args.tls_cert else None
 
     key = core.load_or_create_key()
     try:
@@ -90,7 +95,7 @@ def main() -> None:
 
     try:
         # manager.config is the same dict the cameras use, so every save keeps cameras + portal together.
-        link = modem_link.get_link(manager.config, key, args.interface, args.auto)
+        link = modem_link.get_link(manager.config, key, args.interface, args.auto, https=ssl_context is not None)
     except (KeyboardInterrupt, RuntimeError) as exc:
         manager.shutdown()
         sys.exit(f"\nStopped: {exc}" if str(exc) else "\nStopped.")
@@ -107,7 +112,10 @@ def main() -> None:
         return new_link
 
     try:
-        app = create_app(manager, renew_link, lambda: current["link"].ip_address)
+        app = create_app(
+            manager, renew_link, lambda: current["link"].ip_address,
+            secure_cookies=ssl_context is not None,
+        )
     except RuntimeError as exc:
         manager.shutdown()
         sys.exit(f"Setup error: {exc}")
@@ -115,7 +123,10 @@ def main() -> None:
     try:
         while True:
             link = current["link"]
-            server = make_server(link.ip_address, link.port, app, threaded=True)  # Modem's network ONLY.
+            server = make_server(
+                link.ip_address, link.port, app, threaded=True,
+                ssl_context=ssl_context,
+            )  # Modem's network ONLY; TLS is opt-in.
             threading.Thread(target=server.serve_forever, daemon=True, name="web").start()
             print_banner(link)
 
