@@ -8,7 +8,7 @@ A self-hosted web portal for RTSP IP cameras: live view, recording, and encrypte
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 ![Platform](https://img.shields.io/badge/Platform-Linux-lightgrey)
 
-Stream and record multiple IP cameras on a browser. The server is created/hosted and recordings are stored on a single Linux computer, that's connected to a networks wifi router/modem. Any phone or laptop on the same modem Wi-Fi, can open the portal in a browser. No app to install, no cloud account, no port forwarding. 
+One Linux computer connects to your cameras and records them. Any phone or laptop on the same modem Wi-Fi opens the portal in a browser. No app to install, no cloud account, no port forwarding.
 
 camera-portal is the successor to [pyqt-camera-dashboard](https://github.com/BleedingCodes/pyqt-camera-dashboard). It uses the same camera engine and the same encrypted config file. The PyQt5 desktop window is replaced by a browser portal.
 
@@ -258,38 +258,6 @@ recordings/
 2. **Portal password.** Unlocks a signed session cookie for 30 days per device. 5 wrong passwords from one IP address within 60 seconds blocks that address for up to 60 seconds.
 3. **Network binding.** The server listens only on this computer's private IP on the modem network. It refuses to start on a public IP.
 
-### Firewall
-
-The portal listens on one TCP port on this computer's private IP. That port is random (20000-60999) and is shown in the banner and in `portal_url.txt`. If the Linux firewall blocks inbound connections, other devices time out when they open the link.
-
-1. Check whether the firewall is active:
-
-```bash
-   sudo ufw status
-```
-
-2. If it is active, allow your local network to reach the portal port. Replace `192.168.12.0/24` with your network and `41873` with the port from your link:
-
-```bash
-   sudo ufw allow from 192.168.12.0/24 to any port 41873 proto tcp
-```
-
-   Find your network with `ip -br addr` (the address and prefix next to your interface, for example `192.168.12.23/24` means `192.168.12.0/24`).
-
-3. After every **Renew link**, the port changes. Remove the old rule and add one for the new port:
-
-```bash
-   sudo ufw status numbered
-   sudo ufw delete <rule number>
-```
-
-- Allow the **local subnet**, not the modem's gateway IP. Phones and laptops connect from their own addresses.
-- Do not use a bare `sudo ufw allow <port>/tcp`. It opens the port to every source.
-- Never forward this port on the modem.
-- - Other firewalls (firewalld, nftables) need the same rules: allow TCP from your local subnet to the portal port, and allow UDP from your local subnet for Find cameras.
-- **Camera video** is pulled over RTSP on TCP only (no UDP), as an outbound connection from this computer to each camera's RTSP port (554 by default, or the port you set). A default `ufw` setup allows outbound traffic, so this normally needs no rule. It only matters if you block outbound traffic or use a strict firewall on the camera network.
-- **Find cameras** sends a multicast probe (UDP 239.255.255.250, port 3702) and the cameras answer with UDP to a random local port. A firewall that blocks inbound UDP drops those answers and the search finds nothing. Allow UDP from your local subnet, for example `sudo ufw allow from 192.168.12.0/24 proto udp` (use your network). Adding a camera by IP does not need this rule.
-
 Renewing the link or changing the password signs out every other device.
 
 ### Files that must never be shared or committed
@@ -308,6 +276,7 @@ All of these are listed in `.gitignore`. Do not remove them from it.
 ## Known Limitations
 
 - **Plain HTTP, no TLS.** The link key and the password cross the Wi-Fi unencrypted at the HTTP level. The Wi-Fi's own WPA2/WPA3 encryption protects them from outsiders, but another device on the same network that captures traffic could read them. Use this only on a network where you trust every connected device. Never forward the portal's port on the modem.
+- **Optional HTTPS.** On networks where the computer has a stable IP/hostname and you can provide a certificate trusted by the client devices, start with `--tls-cert /path/to/cert.pem --tls-key /path/to/key.pem`. Supply both options or neither. With both supplied, the portal link uses `https://` and session cookies are marked Secure. HTTP remains the default for changing-address plug-in-and-go setups; use it only on a trusted network as described above. Do not train users to bypass certificate warnings.
 - **Linux only.**
 - **Remove is session-only.** There is no permanent delete. A removed camera comes back when the server restarts, or sooner if you add it again.
 - **Find cameras needs ONVIF and the same network segment.** Everything else works with plain RTSP.
@@ -348,7 +317,7 @@ Change these in the source if your setup differs.
 | `Port NNNNN is in use` | The portal is already running, or another program took the port | Stop the other copy. If none is running: `python modem_link.py --renew` |
 | `Config error: Could not decrypt camera_config.json` | `secret.key` does not match the config | Copy the `secret.key` that was used with this config into the folder |
 | `No portal password set. Run 'python run_server.py' once in a terminal` | First run was started without a terminal (for example from a script) | Run it once from a terminal |
-| Other devices can't open the link at all (times out) | A firewall on the Linux machine blocks the portal port | Check with sudo ufw status. If active, allow your local subnet to the port from the banner. See [Firewall](#firewall). Repeat after every Renew link |
+| Other devices can't open the link at all (times out) | A firewall on the Linux machine blocks the portal port | Check with `sudo ufw status`. If active, allow the port from the banner: `sudo ufw allow <port>/tcp`. Repeat after every Renew link (it changes the port). |
 | Find cameras finds nothing | ONVIF is off, the cameras are on another subnet, or a firewall drops the replies | Turn ONVIF on in each camera. If `sudo ufw status` shows active, allow UDP from the local network, for example `sudo ufw allow proto udp from 192.168.12.0/24` (use your network). Or add cameras by IP. |
 | "The camera rejected the username or password for ONVIF" | Wrong login, or the brand needs a separate ONVIF user | Re-check the login. For Hikvision, create an ONVIF user in the camera's settings. Or choose the brand preset instead. |
 | "Automatic detection failed: No ONVIF service answered" | ONVIF is off, or the camera uses a non-standard ONVIF port | Turn ONVIF on, use **Find cameras** first (it learns the right port), or choose a brand preset / Other |
@@ -364,5 +333,6 @@ Change these in the source if your setup differs.
 MIT License — see [LICENSE](LICENSE).
 
 ## Built by MainbyteLabs
-Technical documentation and Python tooling for electronics labs and hardware teams — developed with AI, directed and tested by a working electronics technician.
+
+Technical documentation and Python tooling for electronics labs and hardware teams.
 https://github.com/MR-MainbyteLabs
