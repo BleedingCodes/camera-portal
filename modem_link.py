@@ -48,10 +48,12 @@ class ModemLink:
     gateway: str     # The modem's own IP, e.g. 192.168.8.1 ("" if unknown)
     port: int
     url_key: str
+    https: bool = False
 
     @property
     def url(self) -> str:
-        return f"http://{self.ip_address}:{self.port}/?key={self.url_key}"
+        scheme = "https" if self.https else "http"
+        return f"{scheme}://{self.ip_address}:{self.port}/?key={self.url_key}"
 
 
 # ── Network detection ────────────────────────────────────────────────────────
@@ -140,7 +142,7 @@ def _new_link_settings(ip_address: str) -> dict:
 
 
 def get_link(config: dict, key: bytes, interface: str | None = None, auto: bool = False,
-             check_port: bool = True) -> ModemLink:
+             check_port: bool = True, https: bool = False) -> ModemLink:
     """Wait for the modem, then return the saved link (creating it the first time).
 
     interface: pin this interface and remember it.  auto=True: forget any pin.
@@ -166,7 +168,7 @@ def get_link(config: dict, key: bytes, interface: str | None = None, auto: bool 
         raise RuntimeError(f"Port {portal['port']} is in use. Is the portal already running? "
                            "If not, run: python modem_link.py --renew")
 
-    link = ModemLink(iface, ip_address, gateway, portal["port"], portal["url_key"])
+    link = ModemLink(iface, ip_address, gateway, portal["port"], portal["url_key"], https)
     write_url_file(link)
     return link
 
@@ -176,7 +178,7 @@ def renew_link(config: dict, key: bytes, current: ModemLink) -> ModemLink:
     portal = config.setdefault("portal", {})
     portal.update(_new_link_settings(current.ip_address))
     core.save_config(config, key)
-    link = ModemLink(current.interface, current.ip_address, current.gateway, portal["port"], portal["url_key"])
+    link = ModemLink(current.interface, current.ip_address, current.gateway, portal["port"], portal["url_key"], current.https)
     write_url_file(link)
     return link
 
